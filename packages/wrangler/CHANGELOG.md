@@ -1,5 +1,13 @@
 # wrangler
 
+## 3.60.3
+
+### Patch Changes
+
+- [#6009](https://github.com/cloudflare/workers-sdk/pull/6009) [`169a9fa`](https://github.com/cloudflare/workers-sdk/commit/169a9fa260b7cb76cf5ef9e9e29a4fd33af8cf2f) Thanks [@RamIdeas](https://github.com/RamIdeas)! - fix: reduce the number of parallel file reads on Windows to avoid EMFILE type errors
+
+  Fixes #1586
+
 ## 3.60.2
 
 ### Patch Changes
