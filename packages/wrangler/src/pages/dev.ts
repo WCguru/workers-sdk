@@ -455,9 +455,17 @@ export const Handler = async (args: PagesDevArguments) => {
 		logger.debug(`Compiling worker to "${scriptPath}"...`);
 
 		const onEnd = () => scriptReadyResolve();
+		const watching = new Set();
+
+		// always watch the `functions` directory
+		const watcher = watch([functionsDirectory], {
+			persistent: true,
+			ignoreInitial: true,
+		});
+
 		try {
 			const buildFn = async () => {
-				await buildFunctions({
+				const bundle = await buildFunctions({
 					outfile: scriptPath,
 					functionsDirectory,
 					sourcemap: true,
@@ -469,15 +477,34 @@ export const Handler = async (args: PagesDevArguments) => {
 					routesModule,
 					defineNavigatorUserAgent,
 				});
+
 				await metrics.sendMetricsEvent("build pages functions");
+
+				// external dependencies as returned by ESBuild
+				for (const dep in bundle.dependencies) {
+					const resolvedDep = resolve(functionsDirectory, dep);
+					if (
+						!resolvedDep.match(/\/functions\/./) &&
+						!resolvedDep.match(/\.wrangler\/tmp\/*/) &&
+						// TODO (@Carmen) revisit this condition
+						resolvedDep.match(resolve(process.cwd()))
+					) {
+						if (!watching.has(resolvedDep)) {
+							watching.add(resolvedDep);
+							watcher.add(resolvedDep);
+						}
+					}
+				}
 			};
 
 			await buildFn();
 			// If Functions found routes, continue using Functions
-			watch([functionsDirectory], {
-				persistent: true,
-				ignoreInitial: true,
-			}).on("all", async () => {
+			// TODO (@Carmen) could use some debouncing for bulk
+			// changes here
+			watcher.on("all", async () => {
+				// TODO (@Carmen) consider turning this into proper
+				// verbiage we can display to users
+				logger.warn("[chokidar-add] Rebuilding functions");
 				try {
 					await buildFn();
 				} catch (e) {
@@ -490,6 +517,8 @@ export const Handler = async (args: PagesDevArguments) => {
 							getFunctionsBuildWarning(functionsDirectory, e.message)
 						);
 					} else {
+						// TODO (@Carmen) do we really want to throw for everything
+						// else here?
 						throw e;
 					}
 				}
